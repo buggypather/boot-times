@@ -29,6 +29,10 @@ function Read-BootEvent([hashtable]$Filter, [int]$MaxEvents = 0) {
   } catch {
     # Get-WinEvent reports "no events" as an error; that just means there's nothing yet.
     if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') { return @() }
+    if ($_.FullyQualifiedErrorId -like 'NoMatchingLogsFound*') {
+      throw [InvalidOperationException]::new(
+        "This copy of Windows doesn't keep the boot record (the Diagnostics-Performance log is missing or turned off), so there are no boot times to show.")
+    }
     if ($_.Exception -is [UnauthorizedAccessException]) { throw (New-BootAdminError) }
     throw
   }
@@ -177,7 +181,7 @@ function Write-BootTable($Report) {
       'Until desktop'    = $_.UntilDesktopSeconds
       'Desktop settling' = $_.SettlingSeconds
     }
-  } | Format-Table -AutoSize | Out-Host
+  } | Format-Table -AutoSize | Out-String | ForEach-Object { Write-Host $_.TrimEnd() }
   $average = ($boots | Measure-Object -Property TotalSeconds -Average).Average
   Write-Host ("Average total: {0:N1} s.  'Until desktop' is when you could sign in and see the desktop;" -f $average)
   Write-Host "'Desktop settling' is the time after that until startup programs stopped slowing the PC."
@@ -188,7 +192,7 @@ function Write-BootTable($Report) {
     Write-Host 'Things that slowed these boots down, worst first:' -ForegroundColor Cyan
     $slowedBy | ForEach-Object {
       [pscustomobject]@{ 'What' = $_.What; 'Times' = $_.Times; 'Extra seconds' = $_.ExtraSeconds }
-    } | Format-Table -AutoSize | Out-Host
+    } | Format-Table -AutoSize | Out-String | ForEach-Object { Write-Host $_.TrimEnd() }
   }
 }
 

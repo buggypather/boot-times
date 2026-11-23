@@ -42,32 +42,31 @@ jobs:
           $found | Format-Table -AutoSize
           if ($found | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors.' }
 
-      - name: Module commands
+      - name: Pester tests (made-up boot records)
         run: |
           $ErrorActionPreference = 'Stop'
-          Import-Module ./BootTimes/BootTimes.psd1
-          if (-not (Get-Command boot-times -ErrorAction SilentlyContinue)) { throw 'boot-times alias missing' }
-          Get-BootTime -Count 3 | Format-Table
-          Get-BootSlowdown -Top 3 | Format-Table
-          boot-times -Count 3 -NoElevate
+          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Import-Module Pester -MinimumVersion 5.5.0
+          $result = Invoke-Pester -Path ./tests -Output Detailed -PassThru
+          if ($result.FailedCount -gt 0) { throw "$($result.FailedCount) Pester tests failed." }
 
-      - name: Script, table and JSON
+      # GitHub's Windows Server machines don't keep the Diagnostics-Performance log, so on this
+      # machine the commands should either work or explain that the log is missing.
+      - name: Script and npm command on this machine
         run: |
-          $ErrorActionPreference = 'Stop'
-          ./boot-times.ps1 -Count 3 -NoElevate
-          if ($LASTEXITCODE) { throw "table exit $LASTEXITCODE" }
-          $text = ./boot-times.ps1 -Count 3 -Json -NoElevate | Out-String
-          if ($LASTEXITCODE) { throw "json exit $LASTEXITCODE" }
-          $data = $text | ConvertFrom-Json
-          if ($null -eq $data.PSObject.Properties['boots'] -or $null -eq $data.PSObject.Properties['slowedBy']) { throw "bad JSON: $text" }
-          "boots: $(@($data.boots).Count), average: $($data.averageTotalSeconds)"
-
-      - name: npm command
-        run: |
-          $ErrorActionPreference = 'Stop'
-          node bin/boot-times.js --help
-          $text = node bin/boot-times.js 3 --json --no-elevate | Out-String
-          if ($LASTEXITCODE) { throw "exit $LASTEXITCODE" }
-          ($text | ConvertFrom-Json).boots | Format-Table
-          node bin/boot-times.js -n 2 --no-elevate
-          if ($LASTEXITCODE) { throw "exit $LASTEXITCODE" }
+          $ErrorActionPreference = 'Continue'
+          function Check($label, $exit, $text) {
+            "--- $label (exit $exit)"; $text
+            if ($exit -eq 0) { return }
+            if ($exit -eq 1 -and $text -match "doesn't keep the boot record") { return }
+            throw "$label failed"
+          }
+          $ps = (Get-Process -Id $PID).Path
+          $run = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './boot-times.ps1', '-Count', '3', '-NoElevate')
+          $t = & $ps @run 2>&1 | Out-String; Check 'table' $LASTEXITCODE $t
+          $t = & $ps @run -Json 2>&1 | Out-String; $e = $LASTEXITCODE; Check 'json' $e $t
+          if ($e -eq 0) { $null = $t | ConvertFrom-Json }
+          $t = node bin/boot-times.js 3 --json --no-elevate 2>&1 | Out-String; Check 'npm json' $LASTEXITCODE $t
+          $t = node bin/boot-times.js --help 2>&1 | Out-String; Check 'npm help' $LASTEXITCODE $t
+          $t = node bin/boot-times.js --fast 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 2) { throw "unknown option should exit 2, got $LASTEXITCODE" }
