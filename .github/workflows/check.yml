@@ -1,0 +1,73 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: npm pack --dry-run
+
+  windows:
+    # GitHub's Windows machines run as admin, so this reads a real boot record.
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Manifest and lint
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Test-ModuleManifest ./BootTimes/BootTimes.psd1 | Format-List Name, Version, ExportedFunctions, ExportedAliases
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $found = Invoke-ScriptAnalyzer -Path . -Recurse -ExcludeRule PSAvoidUsingWriteHost
+          $found | Format-Table -AutoSize
+          if ($found | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors.' }
+
+      - name: Module commands
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module ./BootTimes/BootTimes.psd1
+          if (-not (Get-Command boot-times -ErrorAction SilentlyContinue)) { throw 'boot-times alias missing' }
+          Get-BootTime -Count 3 | Format-Table
+          Get-BootSlowdown -Top 3 | Format-Table
+          boot-times -Count 3 -NoElevate
+
+      - name: Script, table and JSON
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./boot-times.ps1 -Count 3 -NoElevate
+          if ($LASTEXITCODE) { throw "table exit $LASTEXITCODE" }
+          $text = ./boot-times.ps1 -Count 3 -Json -NoElevate | Out-String
+          if ($LASTEXITCODE) { throw "json exit $LASTEXITCODE" }
+          $data = $text | ConvertFrom-Json
+          if ($null -eq $data.PSObject.Properties['boots'] -or $null -eq $data.PSObject.Properties['slowedBy']) { throw "bad JSON: $text" }
+          "boots: $(@($data.boots).Count), average: $($data.averageTotalSeconds)"
+
+      - name: npm command
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node bin/boot-times.js --help
+          $text = node bin/boot-times.js 3 --json --no-elevate | Out-String
+          if ($LASTEXITCODE) { throw "exit $LASTEXITCODE" }
+          ($text | ConvertFrom-Json).boots | Format-Table
+          node bin/boot-times.js -n 2 --no-elevate
+          if ($LASTEXITCODE) { throw "exit $LASTEXITCODE" }
