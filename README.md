@@ -84,6 +84,11 @@ Bump the version in both `package.json` and `BootTimes/BootTimes.psd1`, then pus
 `v1.0.1`. The Release workflow publishes to npm and the PowerShell Gallery (see the notes at the top
 of `.github/workflows/release.yml` for the one-time setup).
 
+## Related tools
+
+See [boot-tools.md](boot-tools.md) for a curated list of other boot-related programs for Windows
+and Linux: boot timers, startup program managers, pending-reboot checkers and boot media makers.
+
 ## License
 
 MIT
