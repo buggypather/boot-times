@@ -1,0 +1,45 @@
+name: Release
+
+# Push a tag like v1.0.1 (matching package.json and BootTimes.psd1) to publish.
+# npm: set up "trusted publishing" for this repo on npmjs.com (no key to store), or add an
+#      NPM_TOKEN secret. PowerShell Gallery: add a PSGALLERY_API_KEY secret.
+# The PowerShell Gallery half is skipped without its key; the npm half needs one of the two.
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Tag matches version
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm test
+      - run: npm install -g npm@latest
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  psgallery:
+    runs-on: windows-latest
+    env:
+      PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish
+        if: env.PSGALLERY_API_KEY != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Test-ModuleManifest ./BootTimes/BootTimes.psd1).Version.ToString()
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "Tag $env:GITHUB_REF_NAME doesn't match module version $version" }
+          Publish-Module -Path ./BootTimes -NuGetApiKey $env:PSGALLERY_API_KEY

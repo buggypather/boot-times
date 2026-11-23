@@ -1,0 +1,73 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: npm pack --dry-run
+
+  windows:
+    # GitHub's Windows machines run as admin, so this reads a real boot record.
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Manifest and lint
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Test-ModuleManifest ./BootTimes/BootTimes.psd1 | Format-List Name, Version, ExportedFunctions, ExportedAliases
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $found = Invoke-ScriptAnalyzer -Path . -Recurse -ExcludeRule PSAvoidUsingWriteHost
+          $found | Format-Table -AutoSize
+          if ($found | Where-Object Severity -eq 'Error') { throw 'PSScriptAnalyzer found errors.' }
+
+      - name: Pester tests (made-up boot records)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Import-Module Pester -MinimumVersion 5.5.0
+          $result = Invoke-Pester -Path ./tests -Output Detailed -PassThru
+          if ($result.FailedCount -gt 0) { throw "$($result.FailedCount) Pester tests failed." }
+
+      # GitHub's Windows Server machines don't keep the Diagnostics-Performance log, so on this
+      # machine the commands should either work or explain that the log is missing.
+      - name: Script and npm command on this machine
+        run: |
+          $ErrorActionPreference = 'Continue'
+          function Check($label, $exit, $text) {
+            "--- $label (exit $exit)"; $text
+            if ($exit -eq 0) { return }
+            if ($exit -eq 1 -and $text -match "doesn't keep the boot record") { return }
+            throw "$label failed"
+          }
+          $ps = (Get-Process -Id $PID).Path
+          $run = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './boot-times.ps1', '-Count', '3', '-NoElevate')
+          $t = & $ps @run 2>&1 | Out-String; Check 'table' $LASTEXITCODE $t
+          $t = & $ps @run -Json 2>&1 | Out-String; $e = $LASTEXITCODE; Check 'json' $e $t
+          if ($e -eq 0) { $null = $t | ConvertFrom-Json }
+          $t = node bin/boot-times.js 3 --json --no-elevate 2>&1 | Out-String; Check 'npm json' $LASTEXITCODE $t
+          $t = node bin/boot-times.js --help 2>&1 | Out-String; Check 'npm help' $LASTEXITCODE $t
+          $t = node bin/boot-times.js --fast 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 2) { throw "unknown option should exit 2, got $LASTEXITCODE" }
+          exit 0

@@ -1,0 +1,37 @@
+{
+  "name": "boot-times",
+  "version": "1.0.0",
+  "description": "Shows how long your Windows PC took to start up over its last boots, and what slowed them down.",
+  "type": "module",
+  "bin": {
+    "boot-times": "bin/boot-times.js"
+  },
+  "files": [
+    "LICENSE",
+    "bin/",
+    "lib/",
+    "BootTimes/",
+    "boot-times.ps1"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "windows",
+    "boot",
+    "boot-time",
+    "startup",
+    "performance",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buggypather/boot-times.git"
+  },
+  "homepage": "https://github.com/buggypather/boot-times#readme",
+  "license": "MIT",
+  "author": "buggypather"
+}
