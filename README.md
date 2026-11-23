@@ -86,7 +86,7 @@ of `.github/workflows/release.yml` for the one-time setup).
 
 ## Related tools
 
-See [boot-tools.md](boot-tools.md) for a curated list of other boot-related programs for Windows
+See [open-boot-programs](https://github.com/buggypather/open-boot-programs) for a curated list of other boot-related programs for Windows
 and Linux: boot timers, startup program managers, pending-reboot checkers and boot media makers.
 
 ## License
