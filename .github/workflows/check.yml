@@ -70,3 +70,4 @@ jobs:
           $t = node bin/boot-times.js --help 2>&1 | Out-String; Check 'npm help' $LASTEXITCODE $t
           $t = node bin/boot-times.js --fast 2>&1 | Out-String
           if ($LASTEXITCODE -ne 2) { throw "unknown option should exit 2, got $LASTEXITCODE" }
+          exit 0

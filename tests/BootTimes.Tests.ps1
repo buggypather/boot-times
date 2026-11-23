@@ -65,7 +65,8 @@ Describe 'BootTimes with two boots' {
     $text = Show-BootTime -Count 5 -Json | Out-String
     $data = $text | ConvertFrom-Json
     @($data.boots).Count | Should -Be 2
-    $data.boots[0].started | Should -Match '^2026-11-23T08:02:00'
+    # pwsh turns ISO dates into DateTime when reading JSON, so check the text itself.
+    $text | Should -Match '"started":\s*"2026-11-23T08:02:00'
     $data.boots[1].totalSeconds | Should -Be 38.7
     $data.averageTotalSeconds | Should -Be 40
     $data.slowedBy[0].what | Should -Be 'Spooler'
